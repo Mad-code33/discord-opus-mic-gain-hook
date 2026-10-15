@@ -126,7 +126,7 @@ static void PinToDiscord(HWND self, int w, int h) {
 }
 
 void RunGui() {
-    constexpr int W = 380, H = 210;
+    constexpr int W = 380, H = 292;
 
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0, 0,
                        GetModuleHandle(nullptr), nullptr, nullptr,
@@ -159,7 +159,7 @@ void RunGui() {
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_dev, g_ctx);
 
-    bool done = false, visible = true;
+    bool done = false, visible = true, insDown = false;
     while (!done) {
         MSG msg;
         while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
@@ -169,7 +169,12 @@ void RunGui() {
         }
         if (done) break;
 
-        if (GetAsyncKeyState(VK_INSERT) & 1) {     // insert — скрыть/показать
+        // insert — скрыть/показать; ловим фронт нажатия: бит &1 общий на все
+        // процессы и его "съедает" любой другой GetAsyncKeyState
+        const bool ins = (GetAsyncKeyState(VK_INSERT) & 0x8000) != 0;
+        const bool insPressed = ins && !insDown;
+        insDown = ins;
+        if (insPressed) {
             visible = !visible;
             if (visible) { PinToDiscord(hwnd, W, H); ShowWindow(hwnd, SW_SHOW); }
             else ShowWindow(hwnd, SW_HIDE);
@@ -215,6 +220,44 @@ void RunGui() {
         if (ImGui::Button("4x",  ImVec2(bw, 0))) g_gain = 4.0f;  ImGui::SameLine();
         if (ImGui::Button("8x",  ImVec2(bw, 0))) g_gain = 8.0f;  ImGui::SameLine();
         if (ImGui::Button("16x", ImVec2(bw, 0))) g_gain = 16.0f;
+
+        ImGui::Spacing();
+        bool fl = g_filterless;
+        if (ImGui::Checkbox("Filterless (raw audio)", &fl)) SetFilterless(fl);
+        int stuck, seen, on, disk, na;
+        bool apm, attn;
+        FilterCounts(stuck, seen, apm, attn);
+        PatchCounts(PATCH_FILTERLESS, on, disk, na);
+        ImGui::SetItemTooltip("NS, NC, AGC, echo, AEC, sidechain, ducking off\n"
+                              "OS processing bypassed, no sample-rate cap\n"
+                              "WebRTC APM config: %s\n"
+                              "attenuation: %s\n"
+                              "high-pass / opus AUDIO: %d on  %d disk  %d n/a\n"
+                              "opus AUDIO and attenuation: rejoin voice",
+                              apm ? "all stages off" : "n/a", attn ? "off" : "n/a",
+                              on, disk, na);
+        ImGui::SameLine();
+        if (stuck) {
+            ImGui::TextDisabled("pre-patched on disk");
+            ImGui::SetItemTooltip("%d setters are 'ret' in discord_voice.node\n"
+                                  "and can't be restored: Filterless skips them", stuck);
+        } else {
+            ImGui::TextDisabled("NS/AGC/HPF/duck off");
+        }
+        // дискорд ещё не звал ни один сеттер — переотправить нечем
+        if (g_filterless && !seen) ImGui::TextDisabled("rejoin voice / toggle a voice setting once");
+
+        static bool stereo = false;
+        if (ImGui::Checkbox("Stereo / HQ", &stereo)) {
+            SetPatches(PATCH_STEREO, stereo);
+            g_hq = stereo;
+        }
+        ImGui::SetItemTooltip("stereo SDP, 48k (in memory)\n"
+                              "opus complexity 10, fullband, no DTX: %d/3 hooked\n"
+                              "rejoin voice to apply", HqHooks());
+        PatchCounts(PATCH_STEREO, on, disk, na);
+        ImGui::SameLine();
+        ImGui::TextDisabled("%d on  %d disk  %d n/a", on, disk, na);
 
         ImGui::SetCursorPosY(io.DisplaySize.y - 26.0f);
         ImGui::TextDisabled("created by madect");

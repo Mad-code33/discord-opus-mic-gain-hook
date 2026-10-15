@@ -11,7 +11,8 @@ static DWORD FindVoicePid() {
     DWORD found = 0;
     if (Process32FirstW(snap, &pe)) {
         do {
-            if (_wcsicmp(pe.szExeFile, L"Discord.exe") != 0) continue;
+            // Discord.exe / DiscordPTB.exe / DiscordCanary.exe
+            if (_wcsnicmp(pe.szExeFile, L"Discord", 7) != 0) continue;
             HANDLE ms = CreateToolhelp32Snapshot(
                 TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pe.th32ProcessID);
             if (ms == INVALID_HANDLE_VALUE) continue;
@@ -82,12 +83,16 @@ int wmain(int argc, wchar_t** argv) {
         VirtualFreeEx(proc, remote, 0, MEM_RELEASE); CloseHandle(proc); return 5;
     }
 
-    WaitForSingleObject(th, 15000);
+    if (WaitForSingleObject(th, 15000) != WAIT_OBJECT_0) {
+        // поток ещё читает путь из remote — не освобождаем, пусть утечёт
+        wprintf(L"[!] LoadLibrary timed out.\n");
+        CloseHandle(th); CloseHandle(proc); return 6;
+    }
     DWORD code = 0; GetExitCodeThread(th, &code);
     VirtualFreeEx(proc, remote, 0, MEM_RELEASE);
     CloseHandle(th); CloseHandle(proc);
 
-    if (!code) { wprintf(L"[!] load failed.\n"); return 6; }
+    if (!code) { wprintf(L"[!] load failed.\n"); return 7; }
     wprintf(L"[+] injected. press Insert to show/hide the window.\n");
     return 0;
 }

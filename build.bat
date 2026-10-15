@@ -34,6 +34,8 @@ cl /nologo /MD /EHsc /O2 /std:c++17 /LD ^
    /I "%MH%\include" /I "%IMGUI%" /I "%IMGUI%\backends" ^
    "%DLL%\dllmain.cpp" ^
    "%DLL%\hookcore.cpp" ^
+   "%DLL%\filters.cpp" ^
+   "%DLL%\patches.cpp" ^
    "%DLL%\gui.cpp" ^
    "%IMGUI%\imgui.cpp" ^
    "%IMGUI%\imgui_draw.cpp" ^
